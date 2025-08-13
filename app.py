@@ -9,6 +9,9 @@ package directly via ``python -m trading_bot.cli``.
 """
 
 from trading_bot.cli import main
+import os
+if os.name == "nt":
+    os.environ.setdefault("MPLBACKEND", "TkAgg")
 
 
 if __name__ == "__main__":

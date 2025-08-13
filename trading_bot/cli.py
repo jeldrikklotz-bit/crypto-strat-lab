@@ -25,6 +25,11 @@ from .optimizer import grid_search_one
 from .plotting import plot_with_numbered_trades
 from .viewer import interactive_backtest_viewer
 from .live import run_live
+import os
+import matplotlib.pyplot as plt
+
+if os.name == "nt":
+    os.environ.setdefault("MPLBACKEND", "TkAgg")
 
 
 def default_choices() -> List[Tuple[type, Dict[str, Any]]]:
@@ -162,18 +167,49 @@ def main(argv: List[str] = None) -> None:
         df = fetch_klines(args.symbol, interval=args.interval, limit=args.limit)
         choices = optimise_all(df)
         run_backtest_and_plot(args.symbol, args.interval, args.limit, choices)
-    else:
+    # --- LIVE mode (single entrypoint) ---
+    # --- LIVE mode: open exactly ONE window ---
+    elif args.mode == "live":
+        from trading_bot.strategies import MACDRSI, SMACross, DonchianBreakout
+        from trading_bot.live import run_live
+
+        # Prefer --symbols; fall back to --symbol; default BTCUSDT
+        raw = (getattr(args, "symbols", None) or getattr(args, "symbol", None) or "BTCUSDT").strip()
+        parsed = [s.strip().upper() for s in raw.split(",") if s.strip()]
+
+        # Deduplicate while keeping order
+        all_syms = list(dict.fromkeys(parsed))
+        if not all_syms:
+            all_syms = ["BTCUSDT"]
+
+        # IMPORTANT: only use the FIRST symbol for the live window
+        main_sym = all_syms[0]
+
+        # Symbols to show in the right-side control panel (can include extras)
+        panel_syms = list(dict.fromkeys(all_syms + ["BTCUSDT", "ETHUSDT", "SOLUSDT", "LINKUSDT", "BNBUSDT", "XRPUSDT"]))
+
+        print(f"[LIVE] opening 1 window for: {main_sym}")
+        # Log the panel list so we can see what's available in the dropdown
+        print(f"[LIVE] panel symbols: {', '.join(panel_syms)}")
+
         run_live(
-            args.symbol,
+            main_sym,
             strategies_to_try=[MACDRSI, SMACross, DonchianBreakout],
-            paper=paper,
-            testnet=testnet,
-            reopt_every=args.reopt_every,
-            hist_bars=args.hist_bars,
+            paper=(args.paper.lower() == "true") if isinstance(args.paper, str) else bool(args.paper),
+            testnet=(args.testnet.lower() == "true") if isinstance(args.testnet, str) else bool(args.testnet),
+            reopt_every=int(args.reopt_every),
+            hist_bars=int(args.hist_bars),
             loop_sec=10,
             live_mode=args.live_mode,
+            interval=args.interval,
+            symbols=panel_syms,
         )
 
+        # VERY IMPORTANT: return so we don't fall through and call run_live again
+        return
+    else:
+        parser.print_help()
+        return
 
 if __name__ == "__main__":
     main()
